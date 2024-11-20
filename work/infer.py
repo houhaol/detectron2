@@ -6,6 +6,7 @@ import os
 import time
 import cv2
 import tqdm
+import numpy as np
 
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
@@ -13,6 +14,8 @@ from detectron2.utils.logger import setup_logger
 
 from predictor import VisualizationDemo
 from detectron2.data import MetadataCatalog
+
+import json
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -91,6 +94,8 @@ if __name__ == "__main__":
 
     test_metadata = MetadataCatalog.get("my_dataset_test")
     demo = VisualizationDemo(cfg, metadata=test_metadata)
+    
+    box_info = {}
     if args.input:
         if len(args.input) == 1:
             args.input = glob.glob(os.path.expanduser(args.input[0]))
@@ -109,7 +114,18 @@ if __name__ == "__main__":
                     time.time() - start_time,
                 )
             )
-
+            # write out the bounding box into Json file
+            box_info[path.split('/')[-1]] = {}
+            box_array_in_list = predictions["instances"].get('pred_boxes').tensor.cpu().detach().numpy()
+            # score_array = np.reshape(predictions["instances"].get('scores').cpu().detach().numpy(), (1,-1))
+            score_array = predictions["instances"].get('scores').cpu().detach().numpy()
+            
+            # box_score = np.concatenate((box_array_in_list, score_array.T), axis=1)
+            # box_info[path.split('/')[-1]]['box_scores'] = [i.tolist() for i in box_score]
+            box_info[path.split('/')[-1]]['boxes'] = [i.tolist() for i in box_array_in_list]
+            box_info[path.split('/')[-1]]['scores'] = score_array.tolist()
+            # box_info[path.split('/')[-1]]['Box_center'] = predictions["instances"].get('pred_boxes').get_centers().cpu().detach().numpy().tolist()
+            ################################################
             if args.output:
                 if os.path.isdir(args.output):
                     assert os.path.isdir(args.output), args.output
@@ -123,6 +139,10 @@ if __name__ == "__main__":
                 cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
                 if cv2.waitKey(0) == 27:
                     break  # esc to quit
+        # write to JSon file
+        with open(args.output + '/box_score.json', 'w') as f:
+            json.dump(box_info, f)
+        #############################
     elif args.video_input:
         video = cv2.VideoCapture(args.video_input)
         width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -134,7 +154,8 @@ if __name__ == "__main__":
         if args.output:
             if os.path.isdir(args.output):
                 output_fname = os.path.join(args.output, basename)
-                output_fname = os.path.splitext(output_fname)[0] + ".mkv"
+                # output_fname = os.path.splitext(output_fname)[0] + ".mkv"
+                output_fname = os.path.splitext(output_fname)[0] + "box.mp4"
             else:
                 output_fname = args.output
             assert not os.path.isfile(output_fname), output_fname
@@ -142,15 +163,18 @@ if __name__ == "__main__":
                 filename=output_fname,
                 # some installation of opencv may not support x264 (due to its license),
                 # you can try other format (e.g. MPEG)
-                fourcc=cv2.VideoWriter_fourcc(*"x264"),
+                # fourcc=cv2.VideoWriter_fourcc(*"x264"),
+                fourcc=cv2.VideoWriter_fourcc(*"mp4v"),
                 fps=float(frames_per_second),
                 frameSize=(width, height),
                 isColor=True,
             )
         assert os.path.isfile(args.video_input)
-        for vis_frame in tqdm.tqdm(demo.run_on_video(video), total=num_frames):
+        for i, (predictions, vis_frame) in tqdm.tqdm(enumerate(demo.run_on_video(video))):
+            import pdb; pdb.set_trace()
             if args.output:
                 output_file.write(vis_frame)
+                cv2.imwrite(os.path.join(args.output, '%05d.jpg' % i), vis_frame)
             else:
                 cv2.namedWindow(basename, cv2.WINDOW_NORMAL)
                 cv2.imshow(basename, vis_frame)

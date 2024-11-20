@@ -99,6 +99,8 @@ class VisualizationDemo(object):
             elif "instances" in predictions:
                 predictions = predictions["instances"].to(self.cpu_device)
                 vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
+                # save hack
+
             elif "sem_seg" in predictions:
                 vis_frame = video_visualizer.draw_sem_seg(
                     frame, predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
@@ -106,7 +108,7 @@ class VisualizationDemo(object):
 
             # Converts Matplotlib RGB format to OpenCV BGR format
             vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
-            return vis_frame
+            return predictions, vis_frame
 
         frame_gen = self._frame_from_video(video)
         if self.parallel:
